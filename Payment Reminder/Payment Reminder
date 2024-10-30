@@ -1,1 +1,194 @@
-xsczdsc
+Sub GenerateEmails()
+    Dim OutApp As Object, OutMail As Object
+    Dim wsPS As Worksheet
+    Dim x As Integer
+    Dim strSubject As String, strRecipient As String
+    Dim emailBodies As Object
+    Dim recipient As Variant
+    Dim emailBody As String
+    Dim currentDate As Date
+    Dim vendorName As String
+
+    Set wsPS = ThisWorkbook.Worksheets("Payment status")
+    Set OutApp = CreateObject("Outlook.Application")
+    Set emailBodies = CreateObject("Scripting.Dictionary")
+
+    ' Disable alerts and screen updating
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+
+    ' Get the current date
+    currentDate = Date
+
+    ' Check data and accumulate email details for initial emails
+    For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+        If wsPS.Range("G" & x) = "Pending" And wsPS.Range("I" & x) = vbNullString Then
+            strRecipient = wsPS.Range("H" & x)
+            vendorName = wsPS.Range("C" & x)
+            
+            ' Initialize email body for the recipient if not already done
+            If Not emailBodies.Exists(strRecipient) Then
+                emailBodies.Add strRecipient, "<table border='1'><tr><th>Invoice Number</th><th>Vendor Name</th><th>Amount in EUR</th><th>Invoice Date</th><th>Due Date</th></tr>"
+            End If
+            
+            ' Add invoice details to the email body
+            emailBodies(strRecipient) = emailBodies(strRecipient) & "<tr><td>" & wsPS.Range("A" & x) & "</td><td>" & wsPS.Range("C" & x) & "</td><td>" & wsPS.Range("D" & x) & "</td><td>" & wsPS.Range("E" & x) & "</td><td>" & wsPS.Range("F" & x) & "</td></tr>"
+        End If
+    Next x
+    
+    ' Send initial emails to each recipient
+    For Each recipient In emailBodies.Keys
+        If emailBodies(recipient) <> "" Then
+            ' Close the HTML table
+            emailBody = emailBodies(recipient) & "</table>"
+            
+            ' Set the subject and body of the email
+            emailBody = "Dear " & vendorName & "," & "<br><br>" & _
+                        "We hope you are doing well. As per our records, we have not yet received payment for the following invoices, which are now past due:<br><br><br>" & _
+                        emailBody & _
+                        "<br><br>We kindly ask you to prioritize this payment to avoid any potential late fees or disruptions in our service. If there are any circumstances affecting your ability to make the payment, please inform us so that we can work together to find a solution.<br><br>" & _
+                        "Please arrange for the payment to be made at your earliest convenience. If you have already made the payment, please provide us with the transaction details so we can update our records accordingly.<br><br>" & _
+                        "Thank you for your cooperation.<br><br>Best regards,"
+            strSubject = "Invoice Overdue Payment"
+            
+            Set OutMail = OutApp.CreateItem(0)
+            With OutMail
+                .To = recipient
+                .Subject = strSubject
+                .HTMLBody = emailBody
+                .Display ' Use .Send to send the email directly
+            End With
+            
+            ' Update the date of email generation in column I
+            For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+                If wsPS.Range("G" & x) = "Pending" And wsPS.Range("I" & x) = vbNullString Then
+                    wsPS.Cells(x, 9) = Format(currentDate, "yyyy-mm-dd")
+                End If
+            Next x
+        End If
+    Next recipient
+
+    ' Clear emailBodies dictionary for reuse
+    Set emailBodies = CreateObject("Scripting.Dictionary")
+
+    ' Check data and accumulate email details for first reminders
+    For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+        If wsPS.Range("G" & x) = "Pending" And wsPS.Range("I" & x) <> vbNullString And wsPS.Range("J" & x) = vbNullString Then
+            If DateDiff("d", wsPS.Range("I" & x), currentDate) >= 7 Then
+                strRecipient = wsPS.Range("H" & x)
+                vendorName = wsPS.Range("C" & x)
+                
+                ' Initialize email body for the recipient if not already done
+                If Not emailBodies.Exists(strRecipient) Then
+                    emailBodies.Add strRecipient, "<table border='1'><tr><th>Invoice Number</th><th>Vendor Name</th><th>Amount in EUR</th><th>Invoice Date</th><th>Due Date</th></tr>"
+                End If
+                
+                ' Add invoice details to the email body
+                emailBodies(strRecipient) = emailBodies(strRecipient) & "<tr><td>" & wsPS.Range("A" & x) & "</td><td>" & wsPS.Range("C" & x) & "</td><td>" & wsPS.Range("D" & x) & "</td><td>" & wsPS.Range("E" & x) & "</td><td>" & wsPS.Range("F" & x) & "</td></tr>"
+            End If
+        End If
+    Next x
+
+    ' Send first reminder emails to each recipient
+    For Each recipient In emailBodies.Keys
+        If emailBodies(recipient) <> "" Then
+            ' Close the HTML table
+            emailBody = emailBodies(recipient) & "</table>"
+            
+            ' Set the subject and body of the email
+            emailBody = "Dear " & vendorName & "," & "<br><br>" & _
+                        "This is a friendly reminder that we have not yet received payment for the following invoices, which are now past due:<br><br><br>" & _
+                        emailBody & _
+                        "<br><br>We kindly ask you to prioritize this payment to avoid any potential late fees or disruptions in our service. If there are any circumstances affecting your ability to make the payment, please inform us so that we can work together to find a solution.<br><br>" & _
+                        "Please arrange for the payment to be made at your earliest convenience. If you have already made the payment, please provide us with the transaction details so we can update our records accordingly.<br><br>" & _
+                        "Thank you for your cooperation.<br><br>Best regards,"
+            strSubject = "First Reminder: Invoice Overdue Payment"
+            
+            Set OutMail = OutApp.CreateItem(0)
+            With OutMail
+                .To = recipient
+                .Subject = strSubject
+                .HTMLBody = emailBody
+                .Display ' Use .Send to send the email directly
+            End With
+            
+            ' Update the date of first reminder generation in column J
+            For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+                If wsPS.Range("G" & x) = "Pending" And wsPS.Range("I" & x) <> vbNullString And wsPS.Range("J" & x) = vbNullString Then
+                    If DateDiff("d", wsPS.Range("I" & x), currentDate) >= 7 Then
+                        wsPS.Cells(x, 10) = Format(currentDate, "yyyy-mm-dd")
+                    End If
+                End If
+            Next x
+        End If
+    Next recipient
+
+    ' Clear emailBodies dictionary for reuse
+    Set emailBodies = CreateObject("Scripting.Dictionary")
+
+    ' Check data and accumulate email details for second reminders
+    For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+        If wsPS.Range("G" & x) = "Pending" And wsPS.Range("J" & x) <> vbNullString And wsPS.Range("K" & x) = vbNullString Then
+            If DateDiff("d", wsPS.Range("J" & x), currentDate) >= 7 Then
+                strRecipient = wsPS.Range("H" & x)
+                vendorName = wsPS.Range("C" & x)
+                
+                ' Initialize email body for the recipient if not already done
+                If Not emailBodies.Exists(strRecipient) Then
+                    emailBodies.Add strRecipient, "<table border='1'><tr><th>Invoice Number</th><th>Vendor Name</th><th>Amount in EUR</th><th>Invoice Date</th><th>Due Date</th></tr>"
+                End If
+                
+                ' Add invoice details to the email body
+                emailBodies(strRecipient) = emailBodies(strRecipient) & "<tr><td>" & wsPS.Range("A" & x) & "</td><td>" & wsPS.Range("C" & x) & "</td><td>" & wsPS.Range("D" & x) & "</td><td>" & wsPS.Range("E" & x) & "</td><td>" & wsPS.Range("F" & x) & "</td></tr>"
+            End If
+        End If
+    Next x
+
+    ' Send second reminder emails to each recipient
+    For Each recipient In emailBodies.Keys
+        If emailBodies(recipient) <> "" Then
+            ' Close the HTML table
+            emailBody = emailBodies(recipient) & "</table>"
+            
+            ' Set the subject and body of the email
+            emailBody = "Dear " & vendorName & "," & "<br><br>" & _
+                        "This is a second reminder that we have not yet received payment for the following invoices, which are now past due:<br><br><br>" & _
+                        emailBody & _
+                        "<br><br>We kindly ask you to prioritize this payment to avoid any potential late fees or disruptions in our service. If there are any circumstances affecting your ability to make the payment, please inform us so that we can work together to find a solution.<br><br>" & _
+                        "Please arrange for the payment to be made at your earliest convenience. If you have already made the payment, please provide us with the transaction details so we can update our records accordingly.<br><br>" & _
+                        "Thank you for your cooperation.<br><br>Best regards,"
+            strSubject = "Second Reminder: Invoice Overdue Payment"
+            
+            Set OutMail = OutApp.CreateItem(0)
+            With OutMail
+                .To = recipient
+                .Subject = strSubject
+                .HTMLBody = emailBody
+                .Display ' Use .Send to send the email directly
+            End With
+            
+            ' Update the date of second reminder generation in column K
+            For x = 6 To wsPS.Cells(wsPS.Rows.Count, "C").End(xlUp).Row
+                If wsPS.Range("G" & x) = "Pending" And wsPS.Range("J" & x) <> vbNullString And wsPS.Range("K" & x) = vbNullString Then
+                    If DateDiff("d", wsPS.Range("J" & x), currentDate) >= 7 Then
+                        wsPS.Cells(x, 11) = Format(currentDate, "yyyy-mm-dd")
+                    End If
+                End If
+            Next x
+        End If
+    Next recipient
+
+ClearCode:
+    Set OutApp = Nothing
+    Set OutMail = Nothing
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error number: " & Err.Number & " " & Err.Description, vbOKOnly + vbCritical, "Error"
+    GoTo ClearCode
+
+End Sub
+
+
